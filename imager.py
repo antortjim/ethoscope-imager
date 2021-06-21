@@ -239,7 +239,7 @@ if __name__ == "__main__":
     import argparse
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("--path")
+    ap.add_argument("--path", required=True)
     ap.add_argument("--fps", default=10)
     ap.add_argument("--id", nargs="+", type=int, required=False, default=None)
     ap.add_argument("--t", nargs="+", type=int, required=False, default=None)
