@@ -62,12 +62,15 @@ class ImageExtractor:
         Save a blob in the experiment_folder with a filename based on id and t
         and return the filename
         """
+        file_name_raw = os.path.join(self.experiment_folder, "IMG_SNAPSHOTS", "%05d_%i_raw.jpg" % (id, t))
         file_name = os.path.join(self.experiment_folder, "IMG_SNAPSHOTS", "%05d_%i.jpg" % (id, t))
+        if os.path.exists(file_name) or os.path.exists(file_name_raw):
+            return file_name_raw
         file_like = io.BytesIO(blob)
-        out_file = open(file_name, "wb")
+        out_file = open(file_name_raw, "wb")
         file_like.seek(0)
         shutil.copyfileobj(file_like, out_file)
-        return file_name
+        return file_name_raw
 
     def make_criteria(self, column: str, value: Union[List, int]):
         """
@@ -152,11 +155,15 @@ class Annotator:
 
         time_s = time/1000
         label = datetime.datetime.fromtimestamp(time_s + self.t0).strftime('%Y-%m-%d %H:%M:%S')
-        out = filename+"_tmp.jpg"
+        out = filename.replace("_raw", "")
+
+        if os.path.exists(out):
+            return None
 
         command = "convert %s -pointsize 50  -font FreeMono -background Khaki  label:'%s' +swap -gravity Center -append %s" % (filename, label, out)
         os.system(command)
-        shutil.move(out, filename)
+        os.remove(filename)
+        # shutil.move(out, filename)
 
 
     def annotate(self, filenames=None, cores=4):
@@ -169,8 +176,12 @@ class Annotator:
             return
 
         pool, pool_args = self.make_pool(filenames, cores)
-        print(pool_args)
+        # print(pool_args)
         pool.map(self.annotate_image, pool_args)
+
+        # TODO Can I receive this as output of the pool.map call?
+        filenames = [f.replace("_raw", "") for f in filenames]
+        return filenames
 
 
 class VideoMaker:
@@ -222,7 +233,7 @@ class EthoscopeImager(VideoMaker, Annotator, ImageExtractor):
         filenames = self.get_frame(criteria)
 
         if (annotate or ANNOTATE) and filenames:
-            self.annotate(filenames)
+            filenames = self.annotate(filenames)
 
         if video:
             self.make_video(**kwargs)
@@ -232,7 +243,9 @@ class EthoscopeImager(VideoMaker, Annotator, ImageExtractor):
 def main(path, **kwargs):
     etho_imager = EthoscopeImager(path = path)
     filenames = etho_imager.run(**kwargs)
-    print(filenames)
+    for f in filenames:
+        print(f)
+
 
 if __name__ == "__main__":
 
