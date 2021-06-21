@@ -11,6 +11,10 @@ from typing import Union, List
 import sqlite3
 from multiprocessing import Pool
 
+# if set to True, the program will always annotate,
+# regardless of what the user specifies
+ANNOTATE = True
+
 class ImageExtractor:
     """
     A class to interact with a single sqlite3 file produced by an ethoscope
@@ -24,6 +28,10 @@ class ImageExtractor:
         self.img_snapshots = os.path.join(self.experiment_folder, "IMG_SNAPSHOTS")
         os.makedirs(self.img_snapshots, exist_ok=True)
         self.t0 = self.get_t0()
+
+    def list_snapshots(self):
+        return glob.glob(os.path.join(self.img_snapshots , "*.jpg"))
+
 
     def get_t0(self):
         """
@@ -85,6 +93,9 @@ class ImageExtractor:
         """
 
         filenames = []
+        if criteria is None:
+            # return self.list_snapshots()
+            return None
         with self.get_connection() as conn:
             cursor = conn.cursor()
             statement = f"SELECT id, t, img FROM IMG_SNAPSHOTS WHERE {criteria}"
@@ -110,17 +121,17 @@ class Annotator:
 
     Owning class must:
 
-      * define self.img_snapshots
       * define self.t0
+      * define list_snapshots()
     """
 
-    def make_pool(self, cores=4):
+    def make_pool(self, filenames, cores=4):
         """
         Set up a parallel processing pool of threads
         """
         pool = Pool(cores)
         pool_args = []
-        for f in glob.glob(os.path.join(self.img_snapshots , "*.jpg")):
+        for f in filenames:
             t = int(os.path.basename(f).split("_")[1].split(".")[0])
             pool_args.append((f,t))
 
@@ -131,7 +142,14 @@ class Annotator:
         Write a banner stating the date time of the snapshot using image magick
         """
         filename, time = args
-        
+
+        # shutil.move(filename, os.path.join(self.img_snapshots, "annotation"))
+        # annotation_filename = os.path.join(
+        #     os.path.dirname(filename),
+        #     "annotation",
+        #     os.path.basename(filename)
+        # )
+
         time_s = time/1000
         label = datetime.datetime.fromtimestamp(time_s + self.t0).strftime('%Y-%m-%d %H:%M:%S')
         out = filename+"_tmp.jpg"
@@ -141,13 +159,16 @@ class Annotator:
         shutil.move(out, filename)
 
 
-    def annotate(self, cores=4):
+    def annotate(self, filenames=None, cores=4):
         """
         Annotate the snapshots stored in the IMG_SNAPSHOTS folder
         using a parallel pool
         """
 
-        pool, pool_args = self.make_pool(cores)
+        if filenames is None:
+            return
+
+        pool, pool_args = self.make_pool(filenames, cores)
         print(pool_args)
         pool.map(self.annotate_image, pool_args)
 
@@ -181,8 +202,8 @@ class EthoscopeImager(VideoMaker, Annotator, ImageExtractor):
             t_criteria = self.make_criteria("t", t)
 
         if id is None and t is None:
-            raise Exception("Please provide a time or id to select snapshots")
-
+            return None
+            
         elif not id is None and not t is None:
             criteria = "{id_criteria} {flag} {t_criteria}"
 
@@ -200,8 +221,8 @@ class EthoscopeImager(VideoMaker, Annotator, ImageExtractor):
         criteria = self.get_criteria(id, t)
         filenames = self.get_frame(criteria)
 
-        if annotate:
-            self.annotate()
+        if (annotate or ANNOTATE) and filenames:
+            self.annotate(filenames)
 
         if video:
             self.make_video(**kwargs)
