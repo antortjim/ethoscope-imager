@@ -5,7 +5,8 @@ import shutil
 import io
 import glob
 import datetime
-
+import tempfile
+import logging
 from typing import Union, List
 
 import sqlite3
@@ -195,9 +196,27 @@ class VideoMaker:
         * define self.img_snapshots
     """
 
-    def make_video(self, fps=10):
+    def make_video(self, id=None, fps=10):
         output = os.path.join(self.img_snapshots, self.filename + ".mp4")
-        command = "ffmpeg -loglevel panic -y -framerate %i -pattern_type glob -i '%s/*.jpg' -c:v libx264 %s" % (fps, self.img_snapshots, output)
+        
+        if id is None:
+            shots_input_dir = self.img_snapshots
+        else:
+            snapshots=[e for e in os.listdir(self.img_snapshots) if e[-3:]=="jpg"]
+            available_ids = [int(e[:5]) for e in snapshots]
+            available_index = [iid in id for iid in available_ids]
+            tmp_dir = tempfile.TemporaryDirectory(prefix="imager-")
+            
+            for i, shot in enumerate(snapshots):
+      
+                # if this available id was in the list of ids passed by the user
+                if available_index[i]:
+                    shutil.copy(os.path.join(self.img_snapshots, snapshots[i]), tmp_dir.name)
+            
+            shots_input_dir = tmp_dir.name
+            logging.warning(f"Directory of snapshots compiled into video: {shots_input_dir}")
+            
+        command = "ffmpeg -loglevel panic -y -framerate %i -pattern_type glob -i '%s/*.jpg' -c:v libx264 %s" % (fps, shots_input_dir, output)
         os.system(command)
         return output
 
@@ -237,7 +256,7 @@ class EthoscopeImager(VideoMaker, Annotator, ImageExtractor):
             filenames = self.annotate(filenames)
 
         if video:
-            filenames = [self.make_video(**kwargs)]
+            filenames = [self.make_video(id=id, **kwargs)]
 
         if filenames is None:
             return self.list_snapshots()
