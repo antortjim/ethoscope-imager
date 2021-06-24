@@ -199,6 +199,7 @@ class VideoMaker:
         output = os.path.join(self.img_snapshots, self.filename + ".mp4")
         command = "ffmpeg -loglevel panic -y -framerate %i -pattern_type glob -i '%s/*.jpg' -c:v libx264 %s" % (fps, self.img_snapshots, output)
         os.system(command)
+        return output
 
 
 class EthoscopeImager(VideoMaker, Annotator, ImageExtractor):
@@ -236,7 +237,10 @@ class EthoscopeImager(VideoMaker, Annotator, ImageExtractor):
             filenames = self.annotate(filenames)
 
         if video:
-            self.make_video(**kwargs)
+            filenames = [self.make_video(**kwargs)]
+
+        if filenames is None:
+            return self.list_snapshots()
 
         return filenames
 
@@ -253,7 +257,7 @@ if __name__ == "__main__":
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--path", required=True)
-    ap.add_argument("--fps", default=10)
+    ap.add_argument("--fps", default=10, type=int)
     ap.add_argument("--id", nargs="+", type=int, required=False, default=None)
     ap.add_argument("--t", nargs="+", type=int, required=False, default=None)
     # ap.add_argument("--video", default=None, type=str)
